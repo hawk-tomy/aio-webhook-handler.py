@@ -1,0 +1,16 @@
+[project]
+name = "aio-webhook-handler-py"
+version = "0.1.0"
+description = "A logging handler that sends log messages to Discord via webhooks."
+readme = "README.md"
+authors = [{ name = "hawk-tomy", email = "me@mail.hawk-tomy.dev" }]
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp>=3.11.13",
+    "discord-py>=2.5",
+    # .
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
