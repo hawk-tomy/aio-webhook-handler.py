@@ -20,13 +20,13 @@ from discord import File, Webhook
 __all__ = ("WebhookHandler", "generate_webhook_handler")
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Callable, Coroutine
     from logging import LogRecord
-    from typing import Self
+    from typing import Any, Self
 
     __all__ = ("WebhookHandler", "WebhookSender", "generate_webhook_handler")
 
-    type WebhookSender = Callable[[], Awaitable[None]]
+    type WebhookSender = Callable[[], Coroutine[Any, Any, None]]
     """A callable that asynchronously sends webhook messages.
 
     This type alias represents a function that takes no arguments and returns an awaitable
