@@ -1,40 +1,53 @@
+"""A logging handler that sends log messages to Discord via webhooks.
+
+This module provides a logging handler that sends log messages to a Discord webhook asynchronously.
+The handler formats log records and enqueues them into an asynchronous queue for dispatching via a webhook.
+
+MIT License
+Copyright (c) 2025-present hawk-tomy
+"""
+
 from __future__ import annotations
 
 from asyncio import Queue, sleep
-from collections.abc import Awaitable, Callable
 from io import BytesIO
-from logging import WARNING, Filter, Handler, LogRecord
+from logging import WARNING, Filter, Handler, LogRecord, NullHandler, getLogger
 from typing import TYPE_CHECKING
 
 from aiohttp import ClientSession
 from discord import File, Webhook
 
+__all__ = ("WebhookHandler", "generate_webhook_handler")
+
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
     from logging import LogRecord
     from typing import Self
 
+    __all__ = ("WebhookHandler", "WebhookSender", "generate_webhook_handler")
 
-__all__ = ("generate_webhook_handler", "WebhookHandler", "WebhookSender")
+    type WebhookSender = Callable[[], Awaitable[None]]
+    """A callable that asynchronously sends webhook messages.
 
-type WebhookSender = Callable[[], Awaitable[None]]
-"""A callable that asynchronously sends webhook messages.
+    This type alias represents a function that takes no arguments and returns an awaitable
+    object. When awaited, the callable sends a message via a Discord webhook.
+    """
 
-This type alias represents a function that takes no arguments and returns an awaitable
-object. When awaited, the callable sends a message via a Discord webhook.
-"""
+logger = getLogger(__name__)
+logger.addHandler(NullHandler())
 
 
 class _AsyncQueueAsAsyncIterator[T](Queue[T]):
     def __aiter__(self) -> Self:
         return self
 
-    async def __anext__(self):
+    async def __anext__(self) -> T:
         return await self.get()
 
 
 class _WebhookFilter(Filter):
     def filter(self, record: LogRecord) -> bool | LogRecord:
-        return record.name != "discord.webhook.async_"
+        return not record.name.startswith("discord.webhook.async_") and not record.name.startswith(__name__)
 
 
 class WebhookHandler(Handler):
@@ -72,9 +85,9 @@ def generate_webhook_handler(url: str) -> tuple[WebhookHandler, WebhookSender]:
     Returns:
         tuple[WebhookHandler, WebhookSender]: A tuple containing a WebhookHandler instance and a webhook sender callable.
     """
-    queue = _AsyncQueueAsAsyncIterator[str]()
+    queue: _AsyncQueueAsAsyncIterator[str] = _AsyncQueueAsAsyncIterator()
 
-    async def webhook_sender():
+    async def webhook_sender() -> None:
         async with ClientSession() as session:
             webhook = await Webhook.from_url(url, session=session).fetch()
             async for msg in queue:
@@ -86,6 +99,10 @@ def generate_webhook_handler(url: str) -> tuple[WebhookHandler, WebhookSender]:
                         else:
                             await webhook.send(file=File(BytesIO(msg.encode("utf-8")), filename="log.txt"))
                     except Exception:
+                        logger.exception(
+                            "Failed to send log message to webhook. Retrying in %d seconds...",
+                            sleep_until,
+                        )
                         await sleep(sleep_until)
                         sleep_until <<= 2
                     else:
